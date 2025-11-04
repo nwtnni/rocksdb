@@ -1,3 +1,6 @@
+#[global_allocator]
+static MIMALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use core::ffi;
 
 #[unsafe(no_mangle)]

@@ -7,4 +7,5 @@ edition = "2024"
 crate-type = ["staticlib"]
 
 [dependencies]
-arctic = { path = "../../../arctic" }
+arctic = { path = "../../../arctic", default-features = false, features = ["opt-node3-get", "opt-node15-get", "smr-hazard"] }
+mimalloc = "0.1.48"
