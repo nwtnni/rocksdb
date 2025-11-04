@@ -25,12 +25,16 @@
             cmake
             gdb
             gflags
+            libsegfault
             linuxPackages_latest.perf
             rustToolchain
             snappy
+            zstd
+            zlib
           ];
           buildInputs = [ python3 ];
           NIX_ENFORCE_NO_NATIVE=false;
+          CMAKE_EXPORT_COMPILE_COMMANDS="ON";
         };
       }
     );

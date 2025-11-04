@@ -437,6 +437,29 @@ class VectorRepFactory : public MemTableRepFactory {
   bool IsInsertConcurrentlySupported() const override { return true; }
 };
 
+class ArcticRepFactory : public MemTableRepFactory {
+  size_t count_;
+  void* arctic;
+
+ public:
+  explicit ArcticRepFactory();
+  ~ArcticRepFactory();
+
+  // Methods for Configurable/Customizable class overrides
+  static const char* kClassName() { return "ArcticRepFactory"; }
+  static const char* kNickName() { return "arctic"; }
+  const char* Name() const override { return kClassName(); }
+  const char* NickName() const override { return kNickName(); }
+
+  // Methods for MemTableRepFactory class overrides
+  using MemTableRepFactory::CreateMemTableRep;
+  MemTableRep* CreateMemTableRep(const MemTableRep::KeyComparator&, Allocator*,
+                                 const SliceTransform*,
+                                 Logger* logger) override;
+
+  bool IsInsertConcurrentlySupported() const override { return true; }
+};
+
 // This class contains a fixed array of buckets, each
 // pointing to a skiplist (null if the bucket is empty).
 // bucket_count: number of fixed array buckets
