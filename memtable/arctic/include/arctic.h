@@ -11,4 +11,14 @@ extern "C" void* arctic_destroy(void* map);
 
 extern "C" void* arctic_ref_destroy(void* ref);
 
+extern "C" void* arctic_iter(void* ref);
+
+extern "C" bool arctic_iter_valid(void* iter);
+
+extern "C" void* arctic_iter_key(void* iter);
+
+extern "C" void arctic_iter_next(void* iter);
+
+extern "C" void arctic_iter_destroy(void* iter);
+
 #endif

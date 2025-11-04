@@ -22,9 +22,18 @@
 namespace ROCKSDB_NAMESPACE {
 namespace {
 
+class Map {
+  void* map;
+
+ public:
+  Map() : map(arctic_new()) {}
+  ~Map() { arctic_destroy(this->map); }
+  void* Ref() { return arctic_ref(this->map); }
+};
+
 class ArcticRep : public MemTableRep {
  public:
-  ArcticRep(Allocator* allocator, void* arctic);
+  ArcticRep(Allocator* allocator);
 
   // Insert key into the collection. (The caller will pack key and value into a
   // single buffer and pass that in as the parameter to Insert)
@@ -46,18 +55,19 @@ class ArcticRep : public MemTableRep {
 
   void BatchPostProcess() override;
 
-  ~ArcticRep() { arctic_ref_destroy(this->arctic); }
+  ~ArcticRep() {}
 
   class Iterator : public MemTableRep::Iterator {
+    void* iter;
+
    public:
-    explicit Iterator(class ArcticRep* vrep,
-                      std::shared_ptr<std::vector<const char*>> bucket,
-                      const KeyComparator& compare);
+    explicit Iterator(void* iter_);
 
     // Initialize an iterator over the specified collection.
     // The returned iterator is not valid.
     // explicit Iterator(const MemTableRep* collection);
-    ~Iterator() override = default;
+
+    ~Iterator() { arctic_iter_destroy(this->iter); };
 
     // Returns true iff the iterator is positioned at a valid node.
     bool Valid() const override;
@@ -101,15 +111,25 @@ class ArcticRep : public MemTableRep {
 
  private:
   friend class Iterator;
-  void* arctic;
+  Map map;
+  ThreadLocalPtr ref;
+
+  inline void* Ref() {
+    void* ref_ = this->ref.Get();
+    if (ref_ == nullptr) {
+      ref_ = this->map.Ref();
+      this->ref.Reset(ref_);
+    }
+    return ref_;
+  }
+
+  static void DeleteRef(void* ptr) { arctic_ref_destroy(ptr); }
 };
 
-void ArcticRep::Insert(KeyHandle handle) {
-  arctic_insert(this->arctic, handle);
-}
+void ArcticRep::Insert(KeyHandle handle) { arctic_insert(Ref(), handle); }
 
 void ArcticRep::InsertConcurrently(KeyHandle handle) {
-  arctic_insert(this->arctic, handle);
+  ArcticRep::Insert(handle);
 }
 
 // Returns true iff an entry that compares equal to key is in the collection.
@@ -118,96 +138,84 @@ bool ArcticRep::Contains(const char* key) const {
   return false;
 }
 
-void ArcticRep::MarkReadOnly() { assert(false); }
+void ArcticRep::MarkReadOnly() {}
 
 size_t ArcticRep::ApproximateMemoryUsage() { return 0; }
 
-void ArcticRep::BatchPostProcess() { assert(false); }
+void ArcticRep::BatchPostProcess() {}
 
-ArcticRep::ArcticRep(Allocator* allocator, void* arctic_)
-    : MemTableRep(allocator) {
-  this->arctic = arctic_ref(arctic_);
+ArcticRep::ArcticRep(Allocator* allocator)
+    : MemTableRep(allocator), map(), ref(ArcticRep::DeleteRef) {}
+
+ArcticRep::Iterator::Iterator(void* iter_) : iter(iter_) {}
+
+// Returns true iff the iterator is positioned at a valid node.
+bool ArcticRep::Iterator::Valid() const {
+  return arctic_iter_valid(this->iter);
 }
 
-// ArcticRep::Iterator::Iterator(class ArcticRep* vrep,
-//                               std::shared_ptr<std::vector<const char*>>
-//                               bucket, const KeyComparator& compare)
-//     : vrep_(vrep),
-//       bucket_(bucket),
-//       cit_(bucket_->end()),
-//       compare_(compare),
-//       sorted_(false) {}
+// Returns the key at the current position.
+// REQUIRES: Valid()
+const char* ArcticRep::Iterator::key() const {
+  return static_cast<char*>(arctic_iter_key(this->iter));
+}
 
-// void ArcticRep::Iterator::DoSort() const { assert(false); }
+// Advances to the next position.
+// REQUIRES: Valid()
+void ArcticRep::Iterator::Next() { arctic_iter_next(this->iter); }
 
-// // Returns true iff the iterator is positioned at a valid node.
-// bool ArcticRep::Iterator::Valid() const {
-//   assert(false);
-//   return false;
-// }
-//
-// // Returns the key at the current position.
-// // REQUIRES: Valid()
-// const char* ArcticRep::Iterator::key() const {
-//   assert(false);
-//   return "";
-// }
-//
-// // Advances to the next position.
-// // REQUIRES: Valid()
-// void ArcticRep::Iterator::Next() { assert(false); }
-//
-// // Advances to the previous position.
-// // REQUIRES: Valid()
-// void ArcticRep::Iterator::Prev() { assert(false); }
-//
-// // Advance to the first entry with a key >= target
-// void ArcticRep::Iterator::Seek(const Slice& user_key,
-//                                const char* memtable_key) {
-//   assert(false);
-// }
-//
-// Status ArcticRep::Iterator::SeekAndValidate(
-//     const Slice& /* internal_key */, const char* /* memtable_key */,
-//     bool /* allow_data_in_errors */, bool /* detect_key_out_of_order */,
-//     const std::function<Status(const char*, bool)>&
-//     /* key_validation_callback */) {
-//   assert(false);
-//   return Status::NotSupported("SeekAndValidate() not implemented");
-// }
-//
-// // Advance to the first entry with a key <= target
-// void ArcticRep::Iterator::SeekForPrev(const Slice& /*user_key*/,
-//                                       const char* /*memtable_key*/) {
-//   assert(false);
-// }
-//
-// // Position at the first entry in collection.
-// // Final state of iterator is Valid() iff collection is not empty.
-// void ArcticRep::Iterator::SeekToFirst() { assert(false); }
-//
-// // Position at the last entry in collection.
-// // Final state of iterator is Valid() iff collection is not empty.
-// void ArcticRep::Iterator::SeekToLast() { assert(false); }
-//
+// Advances to the previous position.
+// REQUIRES: Valid()
+void ArcticRep::Iterator::Prev() { assert(false); }
+
+// Advance to the first entry with a key >= target
+void ArcticRep::Iterator::Seek(const Slice& user_key,
+                               const char* memtable_key) {
+  assert(false);
+}
+
+Status ArcticRep::Iterator::SeekAndValidate(
+    const Slice& /* internal_key */, const char* /* memtable_key */,
+    bool /* allow_data_in_errors */, bool /* detect_key_out_of_order */,
+    const std::function<Status(const char*, bool)>&
+    /* key_validation_callback */) {
+  assert(false);
+  return Status::NotSupported("SeekAndValidate() not implemented");
+}
+
+// Advance to the first entry with a key <= target
+void ArcticRep::Iterator::SeekForPrev(const Slice& /*user_key*/,
+                                      const char* /*memtable_key*/) {
+  assert(false);
+}
+
+// Position at the first entry in collection.
+// Final state of iterator is Valid() iff collection is not empty.
+void ArcticRep::Iterator::SeekToFirst() {}
+
+// Position at the last entry in collection.
+// Final state of iterator is Valid() iff collection is not empty.
+void ArcticRep::Iterator::SeekToLast() { assert(false); }
+
 void ArcticRep::Get(const LookupKey& k, void* callback_args,
                     bool (*callback_func)(void* arg, const char* entry)) {
   assert(false);
 }
 
 MemTableRep::Iterator* ArcticRep::GetIterator(Arena* arena) {
-  assert(false);
-  return nullptr;
+  char* mem = nullptr;
+  if (arena != nullptr) {
+    mem = arena->AllocateAligned(sizeof(Iterator));
+  }
+  return new (mem) ArcticRep::Iterator(arctic_iter(Ref()));
 }
 }  // namespace
 
-ArcticRepFactory::ArcticRepFactory() { this->arctic = arctic_new(); }
-
-ArcticRepFactory::~ArcticRepFactory() { arctic_destroy(this->arctic); }
+ArcticRepFactory::ArcticRepFactory() {}
 
 MemTableRep* ArcticRepFactory::CreateMemTableRep(
     const MemTableRep::KeyComparator& compare, Allocator* allocator,
     const SliceTransform*, Logger* /*logger*/) {
-  return new ArcticRep(allocator, this->arctic);
+  return new ArcticRep(allocator);
 }
 }  // namespace ROCKSDB_NAMESPACE

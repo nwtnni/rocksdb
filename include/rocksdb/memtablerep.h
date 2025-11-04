@@ -439,11 +439,9 @@ class VectorRepFactory : public MemTableRepFactory {
 
 class ArcticRepFactory : public MemTableRepFactory {
   size_t count_;
-  void* arctic;
 
  public:
   explicit ArcticRepFactory();
-  ~ArcticRepFactory();
 
   // Methods for Configurable/Customizable class overrides
   static const char* kClassName() { return "ArcticRepFactory"; }

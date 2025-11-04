@@ -1168,14 +1168,14 @@ add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
 target_include_directories(${ROCKSDB_STATIC_LIB} PUBLIC
   $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE
-    ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${CMAKE_SOURCE_DIR}/memtable/arctic/target/debug/libarctic_rocksdb.a)
+    ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${CMAKE_SOURCE_DIR}/memtable/arctic/target/release/libarctic_rocksdb.a)
 
 if(ROCKSDB_BUILD_SHARED)
   add_library(${ROCKSDB_SHARED_LIB} SHARED ${SOURCES} ${BUILD_VERSION_CC})
   target_include_directories(${ROCKSDB_SHARED_LIB} PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
   target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE
-      ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${CMAKE_SOURCE_DIR}/memtable/arctic/target/debug/libarctic_rocksdb.a)
+      ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${CMAKE_SOURCE_DIR}/memtable/arctic/target/release/libarctic_rocksdb.a)
 
   if(WIN32)
     set_target_properties(${ROCKSDB_SHARED_LIB} PROPERTIES

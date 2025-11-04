@@ -1901,6 +1901,9 @@ static Status CreateMemTableRepFactory(
   } else if (!strcasecmp(FLAGS_memtablerep.c_str(),
                          VectorRepFactory::kNickName())) {
     factory->reset(new VectorRepFactory());
+  } else if (!strcasecmp(FLAGS_memtablerep.c_str(),
+                         ArcticRepFactory::kNickName())) {
+    factory->reset(new ArcticRepFactory());
   } else if (!strcasecmp(FLAGS_memtablerep.c_str(), "hash_linkedlist")) {
     factory->reset(NewHashLinkListRepFactory(FLAGS_hash_bucket_count));
   } else {

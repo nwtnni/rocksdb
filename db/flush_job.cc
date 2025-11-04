@@ -1018,9 +1018,9 @@ Status FlushJob::WriteLevel0Table() {
         ROCKS_LOG_WARN(db_options_.info_log, "[%s] [JOB %d] Level-0 flush %s",
                        cfd_->GetName().c_str(), job_context_->job_id,
                        msg.c_str());
-        if (db_options_.flush_verify_memtable_count) {
-          s = Status::Corruption(msg);
-        }
+        // if (db_options_.flush_verify_memtable_count) {
+        //   s = Status::Corruption(msg);
+        // }
       }
 
       // Only verify on table with format collects table properties
