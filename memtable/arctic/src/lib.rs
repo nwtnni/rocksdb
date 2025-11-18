@@ -143,7 +143,7 @@ impl Iter {
     unsafe fn new(
         r#ref: &'static mut arctic::concurrent::MapRef<'static, Vec<u8>, u64>,
     ) -> Option<Self> {
-        let guard = r#ref.prefix(&[])?;
+        let guard = r#ref.all();
         // HACK: work around self-referential lifetime
 
         let mut iter = guard.values::<arctic::iter::Sorted>();
