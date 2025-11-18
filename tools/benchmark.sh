@@ -49,6 +49,7 @@ function display_usage() {
   echo -e "\tVALUE_SIZE\t\t\tThe size of the values to use in the benchmark (default: 400 bytes)"
   echo -e "\tBLOCK_SIZE\t\t\tThe size of the database blocks in the benchmark (default: 8 KB)"
   echo -e "\tDB_BENCH_NO_SYNC\t\tDisable fsync on the WAL"
+  echo -e "\tMEMTABLEREP\t\t\t\tMemtable representation to use"
   echo -e "\tNUMACTL\t\t\t\tWhen defined use numactl --interleave=all"
   echo -e "\tNUM_THREADS\t\t\tThe number of threads to use (default: 64)"
   echo -e "\tMB_WRITE_PER_SEC\t\t\tRate limit for background writer"
@@ -166,6 +167,7 @@ else
   exit $EXIT_INVALID_ARGS
 fi
 
+memtablerep=${MEMTABLEREP:-skip_list}
 num_threads=${NUM_THREADS:-64}
 mb_written_per_sec=${MB_WRITE_PER_SEC:-0}
 # Only for tests that do range scans
@@ -294,7 +296,7 @@ const_params_base="
   --report_interval_seconds=$report_interval_seconds \
   --histogram=1 \
   \
-  --memtablerep=skip_list \
+  --memtablerep=$memtablerep \
   --bloom_bits=10 \
   --open_files=-1 \
   --subcompactions=$subcompactions \
@@ -383,7 +385,7 @@ params_w="$l0_config \
 
 params_bulkload="--max_background_jobs=$max_background_jobs \
                  --max_write_buffer_number=8 \
-                 --allow_concurrent_memtable_write=false \
+                 --allow_concurrent_memtable_write=true \
                  --level0_file_num_compaction_trigger=$((10 * M)) \
                  --level0_slowdown_writes_trigger=$((10 * M)) \
                  --level0_stop_writes_trigger=$((10 * M)) \
@@ -411,7 +413,7 @@ params_univ_compact="$const_params \
                 --level0_slowdown_writes_trigger=16 \
                 --level0_stop_writes_trigger=20"
 
-tsv_header="ops_sec\tmb_sec\tlsm_sz\tblob_sz\tc_wgb\tw_amp\tc_mbps\tc_wsecs\tc_csecs\tb_rgb\tb_wgb\tusec_op\tp50\tp99\tp99.9\tp99.99\tpmax\tuptime\tstall%\tNstall\tu_cpu\ts_cpu\trss\ttest\tdate\tversion\tjob_id\tgithash"
+tsv_header="ops_sec\tmb_sec\tlsm_sz\tblob_sz\tc_wgb\tw_amp\tc_mbps\tc_wsecs\tc_csecs\tb_rgb\tb_wgb\tusec_op\tp50\tp99\tp99.9\tp99.99\tpmax\tuptime\tstall%\tNstall\tu_cpu\ts_cpu\trss\ttest\tdate\tversion\tjob_id\tgithash\tnum_threads\tmemtablerep"
 
 function get_cmd() {
   output=$1
@@ -638,10 +640,12 @@ function summarize_result {
     echo -e "# version - RocksDB version" >> "$report"
     echo -e "# job_id - User-provided job ID" >> "$report"
     echo -e "# githash - git hash at which db_bench was compiled" >> "$report"
+    echo -e "# num_threads - number of threads" >> "$report"
+    echo -e "# memtablerep - memtable representation" >> "$report"
     echo -e $tsv_header >> "$report"
   fi
 
-  echo -e "$ops_sec\t$mb_sec\t$lsm_size\t$blob_size\t$sum_wgb\t$wamp\t$cmb_ps\t$c_wsecs\t$c_csecs\t$b_rgb\t$b_wgb\t$usecs_op\t$p50\t$p99\t$p999\t$p9999\t$pmax\t$uptime\t$stall_pct\t$nstall\t$u_cpu\t$s_cpu\t$rss\t$test_name\t$my_date\t$version\t$job_id\t$git_hash" \
+  echo -e "$ops_sec\t$mb_sec\t$lsm_size\t$blob_size\t$sum_wgb\t$wamp\t$cmb_ps\t$c_wsecs\t$c_csecs\t$b_rgb\t$b_wgb\t$usecs_op\t$p50\t$p99\t$p999\t$p9999\t$pmax\t$uptime\t$stall_pct\t$nstall\t$u_cpu\t$s_cpu\t$rss\t$test_name\t$my_date\t$version\t$job_id\t$git_hash\t$num_threads\t$memtablerep" \
     >> "$report"
 }
 
@@ -656,9 +660,7 @@ function run_bulkload {
        --disable_auto_compactions=1 \
        --sync=0 \
        $params_bulkload \
-       --threads=1 \
-       --memtablerep=vector \
-       --allow_concurrent_memtable_write=false \
+       --threads=$num_threads \
        --disable_wal=1 \
        --seed=$( date +%s ) \
        --report_file=${log_file_name}.r.csv \
@@ -672,23 +674,23 @@ function run_bulkload {
   eval $cmd
   summarize_result $log_file_name bulkload fillrandom
 
-  echo "Compacting..."
-  log_file_name=$output_dir/benchmark_bulkload_compact.log
-  time_cmd=$( get_cmd $log_file_name.time )
-  cmd="$time_cmd ./db_bench --benchmarks=compact,stats \
-       --use_existing_db=1 \
-       --disable_auto_compactions=1 \
-       --sync=0 \
-       $params_w \
-       --threads=1 \
-       2>&1 | tee -a $log_file_name"
-  if [[ "$job_id" != "" ]]; then
-    echo "Job ID: ${job_id}" > $log_file_name
-    echo $cmd | tee -a $log_file_name
-  else
-    echo $cmd | tee $log_file_name
-  fi
-  eval $cmd
+  # echo "Compacting..."
+  # log_file_name=$output_dir/benchmark_bulkload_compact.log
+  # time_cmd=$( get_cmd $log_file_name.time )
+  # cmd="$time_cmd ./db_bench --benchmarks=compact,stats \
+  #      --use_existing_db=1 \
+  #      --disable_auto_compactions=1 \
+  #      --sync=0 \
+  #      $params_w \
+  #      --threads=1 \
+  #      2>&1 | tee -a $log_file_name"
+  # if [[ "$job_id" != "" ]]; then
+  #   echo "Job ID: ${job_id}" > $log_file_name
+  #   echo $cmd | tee -a $log_file_name
+  # else
+  #   echo $cmd | tee $log_file_name
+  # fi
+  # eval $cmd
 }
 
 #
