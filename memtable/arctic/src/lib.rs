@@ -102,10 +102,7 @@ extern "C" fn arctic_iter_key(iter: *const ffi::c_void) -> *const ffi::c_void {
 extern "C" fn arctic_iter_next(iter: *mut ffi::c_void) {
     unsafe {
         if let Some(iter) = iter.cast::<Iter>().as_mut() {
-            iter.next = iter
-                .iter
-                .lend()
-                .map(|(_, value)| value as *const ffi::c_void);
+            iter.next = iter.iter.lend().map(|value| value as *const ffi::c_void);
         }
     }
 }
@@ -122,8 +119,23 @@ extern "C" fn arctic_iter_destroy(iter: *mut ffi::c_void) {
 }
 
 struct Iter {
-    iter: arctic::concurrent::PrefixIter<'static, 'static, Vec<u8>, u64, arctic::iter::Sorted>,
-    _guard: arctic::concurrent::PrefixGuard<'static, 'static, Vec<u8>, u64>,
+    iter: arctic::concurrent::iter::ValueIter<
+        'static,
+        'static,
+        'static,
+        Vec<u8>,
+        u64,
+        core::ops::RangeFull,
+        arctic::iter::Sorted,
+    >,
+    _guard: arctic::concurrent::iter::PrefixGuard<
+        'static,
+        'static,
+        'static,
+        Vec<u8>,
+        u64,
+        core::ops::RangeFull,
+    >,
     next: Option<*const ffi::c_void>,
 }
 
@@ -134,14 +146,16 @@ impl Iter {
         let guard = r#ref.prefix(&[])?;
         // HACK: work around self-referential lifetime
 
-        let mut iter = guard.iter::<arctic::iter::Sorted>();
-        let next = iter.lend().map(|(_, value)| value as *const ffi::c_void);
+        let mut iter = guard.values::<arctic::iter::Sorted>();
+        let next = iter.lend().map(|value| value as *const ffi::c_void);
 
-        let iter: arctic::concurrent::PrefixIter<
+        let iter: arctic::concurrent::iter::ValueIter<
+            'static,
             'static,
             'static,
             Vec<u8>,
             u64,
+            core::ops::RangeFull,
             arctic::iter::Sorted,
         > = unsafe { core::mem::transmute(iter) };
 
