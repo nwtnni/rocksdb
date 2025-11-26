@@ -22,7 +22,12 @@ extern "C" fn arctic_ref(map: *const ffi::c_void) -> *mut ffi::c_void {
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn arctic_insert(r#ref: *mut ffi::c_void, handle: *const ffi::c_void) {
+extern "C" fn arctic_insert(
+    r#ref: *mut ffi::c_void,
+    kbuf: *const ffi::c_char,
+    klen: usize,
+    handle: *const ffi::c_void,
+) {
     let r#ref = unsafe {
         r#ref
             .cast::<arctic::concurrent::MapRef<'static, Vec<u8>, u64>>()
@@ -31,7 +36,7 @@ extern "C" fn arctic_insert(r#ref: *mut ffi::c_void, handle: *const ffi::c_void)
     };
 
     r#ref.upsert(
-        unsafe { core::slice::from_raw_parts(handle.cast::<u8>(), 20) },
+        unsafe { core::slice::from_raw_parts(kbuf.cast(), klen) },
         handle as u64,
     );
 }

@@ -126,7 +126,10 @@ class ArcticRep : public MemTableRep {
   static void DeleteRef(void* ptr) { arctic_ref_destroy(ptr); }
 };
 
-void ArcticRep::Insert(KeyHandle handle) { arctic_insert(Ref(), handle); }
+void ArcticRep::Insert(KeyHandle handle) {
+  auto key = UserKey((const char*)handle);
+  arctic_insert(Ref(), key.data(), key.size(), handle);
+}
 
 void ArcticRep::InsertConcurrently(KeyHandle handle) {
   ArcticRep::Insert(handle);
