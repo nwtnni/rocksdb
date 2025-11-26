@@ -30,7 +30,7 @@ extern "C" fn arctic_insert(r#ref: *mut ffi::c_void, handle: *const ffi::c_void)
             .unwrap()
     };
 
-    r#ref.insert(
+    r#ref.upsert(
         unsafe { core::slice::from_raw_parts(handle.cast::<u8>(), 20) },
         handle as u64,
     );
@@ -119,7 +119,7 @@ extern "C" fn arctic_iter_destroy(iter: *mut ffi::c_void) {
 }
 
 struct Iter {
-    iter: arctic::concurrent::iter::ValueIter<
+    iter: arctic::concurrent::ValueIter<
         'static,
         'static,
         'static,
@@ -128,14 +128,8 @@ struct Iter {
         core::ops::RangeFull,
         arctic::iter::Sorted,
     >,
-    _guard: arctic::concurrent::iter::PrefixGuard<
-        'static,
-        'static,
-        'static,
-        Vec<u8>,
-        u64,
-        core::ops::RangeFull,
-    >,
+    _guard:
+        arctic::concurrent::Prefix<'static, 'static, 'static, Vec<u8>, u64, core::ops::RangeFull>,
     next: Option<*const ffi::c_void>,
 }
 
@@ -149,7 +143,7 @@ impl Iter {
         let mut iter = guard.values::<arctic::iter::Sorted>();
         let next = iter.lend().map(|value| value as *const ffi::c_void);
 
-        let iter: arctic::concurrent::iter::ValueIter<
+        let iter: arctic::concurrent::ValueIter<
             'static,
             'static,
             'static,
