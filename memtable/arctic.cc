@@ -127,7 +127,7 @@ class ArcticRep : public MemTableRep {
 };
 
 void ArcticRep::Insert(KeyHandle handle) {
-  auto key = UserKey((const char*)handle);
+  auto key = GetLengthPrefixedSlice((const char*)handle);
   arctic_insert(Ref(), key.data(), key.size(), handle);
 }
 

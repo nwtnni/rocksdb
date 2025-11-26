@@ -661,6 +661,7 @@ function run_bulkload {
        --sync=0 \
        $params_bulkload \
        --threads=$num_threads \
+       --paranoid_checks=0 \
        --disable_wal=1 \
        --seed=$( date +%s ) \
        --report_file=${log_file_name}.r.csv \

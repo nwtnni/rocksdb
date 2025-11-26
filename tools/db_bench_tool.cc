@@ -5483,7 +5483,7 @@ class Benchmark {
 
   void DoWrite(ThreadState* thread, WriteMode write_mode) {
     const int test_duration = write_mode == RANDOM ? FLAGS_duration : 0;
-    const int64_t num_ops = writes_ == 0 ? num_ : writes_;
+    const int64_t num_ops = (writes_ == 0 ? num_ : writes_) / FLAGS_threads;
 
     size_t num_key_gens = 1;
     if (db_.db == nullptr) {
