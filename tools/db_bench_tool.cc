@@ -4084,11 +4084,11 @@ class Benchmark {
     }
 
     SetPerfLevel(static_cast<PerfLevel>(shared->perf_level));
-    perf_context.EnablePerLevelPerfContext();
+    perf_context.DisablePerLevelPerfContext();
     thread->stats.Start(thread->tid);
     (arg->bm->*(arg->method))(thread);
     if (FLAGS_perf_level > ROCKSDB_NAMESPACE::PerfLevel::kDisable) {
-      thread->stats.AddMessage(std::string("PERF_CONTEXT:\n") +
+      thread->stats.AddMessage(std::string("\nPERF_CONTEXT: ") +
                                get_perf_context()->ToString());
     }
     thread->stats.Stop();

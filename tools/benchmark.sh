@@ -290,6 +290,7 @@ const_params_base="
   --delete_obsolete_files_period_micros=$((60 * M)) \
   --max_bytes_for_level_multiplier=$per_level_fanout \
   \
+  --perf_level=5 \
   --statistics=0 \
   --stats_per_interval=1 \
   --stats_interval_seconds=$stats_interval_seconds \
@@ -413,7 +414,10 @@ params_univ_compact="$const_params \
                 --level0_slowdown_writes_trigger=16 \
                 --level0_stop_writes_trigger=20"
 
-tsv_header="ops_sec\tmb_sec\tlsm_sz\tblob_sz\tc_wgb\tw_amp\tc_mbps\tc_wsecs\tc_csecs\tb_rgb\tb_wgb\tusec_op\tp50\tp99\tp99.9\tp99.99\tpmax\tuptime\tstall%\tNstall\tu_cpu\ts_cpu\trss\ttest\tdate\tversion\tjob_id\tgithash\tnum_threads\tmemtablerep"
+# rg "PERF_CONTEXT" | sed 's/\([^ ]*\) = [0-9]\+\(, \)\?/\\t\1/g'
+perf_header="user_key_comparison_count\tblock_cache_hit_count\tblock_read_count\tblock_read_byte\tblock_read_time\tblock_read_cpu_time\tblock_cache_index_hit_count\tblock_cache_standalone_handle_count\tblock_cache_real_handle_count\tindex_block_read_count\tblock_cache_filter_hit_count\tfilter_block_read_count\tcompression_dict_block_read_count\tblock_cache_index_read_byte\tblock_cache_filter_read_byte\tblock_cache_compression_dict_read_byte\tblock_cache_read_byte\tsecondary_cache_hit_count\tcompressed_sec_cache_insert_real_count\tcompressed_sec_cache_insert_dummy_count\tcompressed_sec_cache_uncompressed_bytes\tcompressed_sec_cache_compressed_bytes\tblock_checksum_time\tblock_decompress_time\tget_read_bytes\tmultiget_read_bytes\titer_read_bytes\tblob_cache_hit_count\tblob_read_count\tblob_read_byte\tblob_read_time\tblob_checksum_time\tblob_decompress_time\tinternal_key_skipped_count\tinternal_delete_skipped_count\tinternal_recent_skipped_count\tinternal_merge_count\tinternal_merge_point_lookup_count\tinternal_range_del_reseek_count\tget_snapshot_time\tget_from_memtable_time\tget_from_memtable_count\tget_post_process_time\tget_from_output_files_time\tseek_on_memtable_time\tseek_on_memtable_count\tnext_on_memtable_count\tprev_on_memtable_count\tseek_child_seek_time\tseek_child_seek_count\tseek_min_heap_time\tseek_max_heap_time\tseek_internal_seek_time\tfind_next_user_entry_time\twrite_wal_time\twrite_memtable_time\twrite_delay_time\twrite_scheduling_flushes_compactions_time\twrite_pre_and_post_process_time\twrite_thread_wait_nanos\tdb_mutex_lock_nanos\tdb_condition_wait_nanos\tmerge_operator_time_nanos\tread_index_block_nanos\tread_filter_block_nanos\tnew_table_block_iter_nanos\tnew_table_iterator_nanos\tblock_seek_nanos\tfind_table_nanos\tbloom_memtable_hit_count\tbloom_memtable_miss_count\tbloom_sst_hit_count\tbloom_sst_miss_count\tkey_lock_wait_time\tkey_lock_wait_count\tenv_new_sequential_file_nanos\tenv_new_random_access_file_nanos\tenv_new_writable_file_nanos\tenv_reuse_writable_file_nanos\tenv_new_random_rw_file_nanos\tenv_new_directory_nanos\tenv_file_exists_nanos\tenv_get_children_nanos\tenv_get_children_file_attributes_nanos\tenv_delete_file_nanos\tenv_create_dir_nanos\tenv_create_dir_if_missing_nanos\tenv_delete_dir_nanos\tenv_get_file_size_nanos\tenv_get_file_modification_time_nanos\tenv_rename_file_nanos\tenv_link_file_nanos\tenv_lock_file_nanos\tenv_unlock_file_nanos\tenv_new_logger_nanos\tget_cpu_nanos\titer_next_cpu_nanos\titer_prev_cpu_nanos\titer_seek_cpu_nanos\titer_next_count\titer_prev_count\titer_seek_count\tencrypt_data_nanos\tdecrypt_data_nanos\tnumber_async_seek\tfile_ingestion_nanos\tfile_ingestion_blocking_live_writes_nanos"
+
+tsv_header="ops_sec\tmb_sec\tlsm_sz\tblob_sz\tc_wgb\tw_amp\tc_mbps\tc_wsecs\tc_csecs\tb_rgb\tb_wgb\tusec_op\tp50\tp99\tp99.9\tp99.99\tpmax\tuptime\tstall%\tNstall\tu_cpu\ts_cpu\trss\ttest\tdate\tversion\tjob_id\tgithash\tnum_threads\tmemtablerep\t$perf_header"
 
 function get_cmd() {
   output=$1
@@ -613,6 +617,8 @@ function summarize_result {
     rss=$( awk '{ printf "%.1f\n", $6 / (1024 * 1024) }' "$test_out".stats.ps | sort -n | tail -1 )
   fi
 
+  perf=$( grep "^PERF_CONTEXT:" $test_out | sed -n 's/[^ ]* = \([0-9]\+\)\(, \)\?/\t\1/gp')
+
   # if the report TSV (Tab Separate Values) file does not yet exist, create it and write the header row to it
   if [ ! -f "$report" ]; then
     echo -e "# ops_sec - operations per second" >> "$report"
@@ -645,8 +651,7 @@ function summarize_result {
     echo -e $tsv_header >> "$report"
   fi
 
-  echo -e "$ops_sec\t$mb_sec\t$lsm_size\t$blob_size\t$sum_wgb\t$wamp\t$cmb_ps\t$c_wsecs\t$c_csecs\t$b_rgb\t$b_wgb\t$usecs_op\t$p50\t$p99\t$p999\t$p9999\t$pmax\t$uptime\t$stall_pct\t$nstall\t$u_cpu\t$s_cpu\t$rss\t$test_name\t$my_date\t$version\t$job_id\t$git_hash\t$num_threads\t$memtablerep" \
-    >> "$report"
+  echo -e "$ops_sec\t$mb_sec\t$lsm_size\t$blob_size\t$sum_wgb\t$wamp\t$cmb_ps\t$c_wsecs\t$c_csecs\t$b_rgb\t$b_wgb\t$usecs_op\t$p50\t$p99\t$p999\t$p9999\t$pmax\t$uptime\t$stall_pct\t$nstall\t$u_cpu\t$s_cpu\t$rss\t$test_name\t$my_date\t$version\t$job_id\t$git_hash\t$num_threads\t$memtablerep$perf" >> "$report"
 }
 
 function run_bulkload {
