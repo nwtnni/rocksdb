@@ -128,10 +128,10 @@ struct Iter {
         'static,
         'static,
         'static,
+        false,
         Vec<u8>,
         u64,
         core::ops::RangeFull,
-        arctic::iter::Sorted,
     >,
     _guard:
         arctic::concurrent::Prefix<'static, 'static, 'static, Vec<u8>, u64, core::ops::RangeFull>,
@@ -145,17 +145,17 @@ impl Iter {
         let guard = r#ref.all();
         // HACK: work around self-referential lifetime
 
-        let mut iter = guard.values::<arctic::iter::Sorted>();
+        let mut iter = guard.values::<false>();
         let next = iter.lend().map(|value| value as *const ffi::c_void);
 
         let iter: arctic::concurrent::ValueIter<
             'static,
             'static,
             'static,
+            false,
             Vec<u8>,
             u64,
             core::ops::RangeFull,
-            arctic::iter::Sorted,
         > = unsafe { core::mem::transmute(iter) };
 
         Some(Self {
