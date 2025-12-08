@@ -12,6 +12,7 @@ checksum = "c858caffa49edfc4ecc45a4bec37abd3e88041a2903816f10f990b7b41abc281"
 name = "arctic"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "polonius-the-crab",
  "ribbit",
  "thread_local",
