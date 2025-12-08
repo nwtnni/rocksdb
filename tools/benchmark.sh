@@ -617,7 +617,7 @@ function summarize_result {
     rss=$( awk '{ printf "%.1f\n", $6 / (1024 * 1024) }' "$test_out".stats.ps | sort -n | tail -1 )
   fi
 
-  perf=$( grep "^PERF_CONTEXT:" $test_out | sed -n 's/[^ ]* = \([0-9]\+\)\(, \)\?/\t\1/gp')
+  perf=$( grep "^PERF_CONTEXT:" $test_out | sed -n 's/ [^ ]* = \([0-9]\+\)\(,\)\?/\t\1/gp')
 
   # if the report TSV (Tab Separate Values) file does not yet exist, create it and write the header row to it
   if [ ! -f "$report" ]; then
