@@ -973,7 +973,6 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
                                   UserWriteCallback* user_write_cb,
                                   uint64_t* wal_used, uint64_t log_ref,
                                   bool disable_memtable, uint64_t* seq_used) {
-  PERF_TIMER_GUARD(write_pre_and_post_process_time);
   StopWatch write_sw(immutable_db_options_.clock, stats_, DB_WRITE);
 
   WriteContext write_context;
@@ -981,23 +980,24 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
   WriteThread::Writer w(write_options, my_batch, callback, user_write_cb,
                         log_ref, disable_memtable, /*_batch_cnt=*/0,
                         /*_pre_release_callback=*/nullptr);
-                        
+
   // write_thread_.JoinBatchGroup(&w);
   // =============================================================
   // TIMER #1: Wrap JoinBatchGroup
   // =============================================================
-  
-  PERF_TIMER_STOP(write_pre_and_post_process_time);
+
   {
     PERF_TIMER_GUARD(write_thread_wait_nanos);
     write_thread_.JoinBatchGroup(&w);
   }
-  PERF_TIMER_START(write_pre_and_post_process_time);
+
   // ===========================================================
 
   TEST_SYNC_POINT("DBImplWrite::PipelinedWriteImpl:AfterJoinBatchGroup");
   if (w.state == WriteThread::STATE_GROUP_LEADER) {
+    PERF_TIMER_GUARD(write_pre_and_post_process_time);
     WriteThread::WriteGroup wal_write_group;
+
     // ==============================================
     // TIMER #2: Wrap WaitForMemTableWriters
     // ==============================================
@@ -1128,7 +1128,10 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
       const ReadOptions read_options;
       w.status = ApplyWALToManifest(read_options, write_options, &synced_wals);
     }
-    write_thread_.ExitAsBatchGroupLeader(wal_write_group, w.status);
+    {
+      PERF_TIMER_GUARD(write_thread_wait_nanos);
+      write_thread_.ExitAsBatchGroupLeader(wal_write_group, w.status);
+    }
   }
 
   // NOTE: the memtable_write_group is declared before the following
@@ -1138,36 +1141,42 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
   WriteThread::WriteGroup memtable_write_group;
 
   if (w.state == WriteThread::STATE_MEMTABLE_WRITER_LEADER) {
-    PERF_TIMER_FOR_WAIT_GUARD(write_memtable_time);
     assert(w.ShouldWriteToMemtable());
 
     // write_thread_.EnterAsMemTableWriter(&w, &memtable_write_group);
     // ==========================================
     // TIMER #4: Wrap EnterAsMemTableWriter
     // ==========================================
-    PERF_TIMER_STOP(write_memtable_time);
     {
       PERF_TIMER_GUARD(write_thread_wait_nanos);
       write_thread_.EnterAsMemTableWriter(&w, &memtable_write_group);
     }
-    PERF_TIMER_START(write_memtable_time);
     // ===============================================================
     if (memtable_write_group.size > 1 &&
         immutable_db_options_.allow_concurrent_memtable_write) {
+      PERF_TIMER_GUARD(write_thread_wait_nanos);
       write_thread_.LaunchParallelMemTableWriters(&memtable_write_group);
     } else {
-      memtable_write_group.status = WriteBatchInternal::InsertInto(
-          memtable_write_group, w.sequence, column_family_memtables_.get(),
-          &flush_scheduler_, &trim_history_scheduler_,
-          write_options.ignore_missing_column_families, 0 /*log_number*/, this,
-          seq_per_batch_, batch_per_txn_);
+      {
+        PERF_TIMER_FOR_WAIT_GUARD(write_memtable_time);
+        memtable_write_group.status = WriteBatchInternal::InsertInto(
+            memtable_write_group, w.sequence, column_family_memtables_.get(),
+            &flush_scheduler_, &trim_history_scheduler_,
+            write_options.ignore_missing_column_families, 0 /*log_number*/,
+            this, seq_per_batch_, batch_per_txn_);
+      }
+
       if (memtable_write_group.status
               .ok()) {  // Don't publish a partial batch write
         versions_->SetLastSequence(memtable_write_group.last_sequence);
       } else {
         HandleMemTableInsertFailure(memtable_write_group.status);
       }
-      write_thread_.ExitAsMemTableWriter(&w, memtable_write_group);
+
+      {
+        PERF_TIMER_GUARD(write_thread_wait_nanos);
+        write_thread_.ExitAsMemTableWriter(&w, memtable_write_group);
+      }
     }
   } else {
     // NOTE: the memtable_write_group is never really used,
@@ -1175,10 +1184,12 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
     memtable_write_group.status.PermitUncheckedError();
   }
   if (w.state == WriteThread::STATE_PARALLEL_MEMTABLE_CALLER) {
-    write_thread_.SetMemWritersEachStride(&w);
+    {
+      PERF_TIMER_GUARD(write_thread_wait_nanos);
+      write_thread_.SetMemWritersEachStride(&w);
+    }
   }
   if (w.state == WriteThread::STATE_PARALLEL_MEMTABLE_WRITER) {
-    PERF_TIMER_STOP(write_pre_and_post_process_time);
     PERF_TIMER_FOR_WAIT_GUARD(write_memtable_time);
 
     assert(w.ShouldWriteToMemtable());
@@ -1192,7 +1203,7 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
         write_options.memtable_insert_hint_per_batch);
 
     PERF_TIMER_STOP(write_memtable_time);
-    PERF_TIMER_START(write_pre_and_post_process_time);
+
     // =================================================
     // TIMER #5: Wrap CompleteParallelMemTableWriter
     // =================================================
@@ -1205,21 +1216,23 @@ Status DBImpl::PipelinedWriteImpl(const WriteOptions& write_options,
     //   }
     //   write_thread_.ExitAsMemTableWriter(&w, *w.write_group);
     // }
-    PERF_TIMER_STOP(write_pre_and_post_process_time);
     bool completed;
     {
       PERF_TIMER_GUARD(write_thread_wait_nanos);
       completed = write_thread_.CompleteParallelMemTableWriter(&w);
     }
-    PERF_TIMER_START(write_pre_and_post_process_time);
-    
+
     if (completed) {
       if (w.status.ok()) {  // Don't publish a partial batch write
         versions_->SetLastSequence(w.write_group->last_sequence);
       } else {
         HandleMemTableInsertFailure(w.status);
       }
-      write_thread_.ExitAsMemTableWriter(&w, *w.write_group);
+
+      {
+        PERF_TIMER_GUARD(write_thread_wait_nanos);
+        write_thread_.ExitAsMemTableWriter(&w, *w.write_group);
+      }
     }
     // ===========================================================
   }
