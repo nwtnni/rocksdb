@@ -10,15 +10,8 @@ extern "C" fn arctic_new() -> *mut ffi::c_void {
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn arctic_ref(map: *const ffi::c_void) -> *mut ffi::c_void {
-    let pin = Box::new(unsafe {
-        map.cast::<arctic::concurrent::Map<Vec<u8>, u64>>()
-            .as_ref()
-            .unwrap()
-            .pin()
-    });
-
-    Box::into_raw(pin).cast()
+extern "C" fn arctic_ref(map: *const ffi::c_void) -> *const ffi::c_void {
+    map
 }
 
 #[unsafe(no_mangle)]
@@ -30,8 +23,8 @@ extern "C" fn arctic_insert(
 ) {
     let r#ref = unsafe {
         r#ref
-            .cast::<arctic::concurrent::MapRef<'static, Vec<u8>, u64>>()
-            .as_mut()
+            .cast::<arctic::concurrent::Map<Vec<u8>, u64>>()
+            .as_ref()
             .unwrap()
     };
 
@@ -42,19 +35,7 @@ extern "C" fn arctic_insert(
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn arctic_ref_destroy(r#ref: *mut ffi::c_void) {
-    if r#ref.is_null() {
-        return;
-    }
-
-    unsafe {
-        drop(Box::from_raw(r#ref.cast::<arctic::concurrent::MapRef<
-            'static,
-            Vec<u8>,
-            u64,
-        >>()))
-    };
-}
+extern "C" fn arctic_ref_destroy(_: *mut ffi::c_void) {}
 
 #[unsafe(no_mangle)]
 extern "C" fn arctic_destroy(map: *mut ffi::c_void) {
@@ -73,8 +54,8 @@ extern "C" fn arctic_destroy(map: *mut ffi::c_void) {
 extern "C" fn arctic_iter(r#ref: *mut ffi::c_void) -> *mut ffi::c_void {
     unsafe {
         r#ref
-            .cast::<arctic::concurrent::MapRef<'static, Vec<u8>, u64>>()
-            .as_mut()
+            .cast::<arctic::concurrent::Map<Vec<u8>, u64>>()
+            .as_ref()
             .map(|r#ref| Iter::new(r#ref))
             .map(Box::new)
             .map(Box::into_raw)
@@ -107,7 +88,7 @@ extern "C" fn arctic_iter_key(iter: *const ffi::c_void) -> *const ffi::c_void {
 extern "C" fn arctic_iter_next(iter: *mut ffi::c_void) {
     unsafe {
         if let Some(iter) = iter.cast::<Iter>().as_mut() {
-            iter.next = iter.iter.lend().map(|value| value as *const ffi::c_void);
+            iter.next = iter.iter.next().map(|value| value as *const ffi::c_void);
         }
     }
 }
@@ -127,40 +108,42 @@ struct Iter {
     iter: arctic::concurrent::ValueIter<
         'static,
         'static,
-        'static,
-        false,
         Vec<u8>,
         u64,
         core::ops::RangeFull,
+        arctic::Ascend,
+        arctic::concurrent::smr::hazard::Guard<
+            'static,
+            arctic::concurrent::smr::hazard::prefix::Le,
+            u64,
+        >,
     >,
-    _guard:
-        arctic::concurrent::Prefix<'static, 'static, 'static, Vec<u8>, u64, core::ops::RangeFull>,
+    _guard: arctic::concurrent::Prefix<
+        'static,
+        'static,
+        Vec<u8>,
+        u64,
+        core::ops::RangeFull,
+        arctic::concurrent::smr::hazard::Guard<
+            'static,
+            arctic::concurrent::smr::hazard::prefix::Le,
+            u64,
+        >,
+    >,
     next: Option<*const ffi::c_void>,
 }
 
 impl Iter {
-    unsafe fn new(
-        r#ref: &'static mut arctic::concurrent::MapRef<'static, Vec<u8>, u64>,
-    ) -> Option<Self> {
+    unsafe fn new(r#ref: &arctic::concurrent::Map<Vec<u8>, u64>) -> Option<Self> {
         let guard = r#ref.all();
         // HACK: work around self-referential lifetime
 
-        let mut iter = guard.values::<false>();
-        let next = iter.lend().map(|value| value as *const ffi::c_void);
-
-        let iter: arctic::concurrent::ValueIter<
-            'static,
-            'static,
-            'static,
-            false,
-            Vec<u8>,
-            u64,
-            core::ops::RangeFull,
-        > = unsafe { core::mem::transmute(iter) };
+        let mut iter = guard.values::<arctic::Ascend>();
+        let next = iter.next().map(|value| value as *const ffi::c_void);
 
         Some(Self {
-            _guard: guard,
-            iter,
+            iter: unsafe { core::mem::transmute(iter) },
+            _guard: unsafe { core::mem::transmute(guard) },
             next,
         })
     }
