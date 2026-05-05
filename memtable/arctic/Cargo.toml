@@ -7,5 +7,5 @@ edition = "2024"
 crate-type = ["staticlib"]
 
 [dependencies]
-arctic = { path = "../../../arctic" }
+arctic = { git = "ssh://github.com/nwtnni/arctic", features = ["opt-membarrier"] }
 mimalloc = "0.1.48"

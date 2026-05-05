@@ -6,7 +6,7 @@ set -o errexit
 set -o xtrace
 
 for iteration in $(seq 20); do
-    for num_threads in 1 2 4 8 16; do
+    for num_threads in 1 2 4 8; do
         for memtablerep in skip_list arctic; do
             rm -rf bench/db/*
             rm -rf bench/wal/*
